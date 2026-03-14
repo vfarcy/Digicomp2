@@ -83,3 +83,6 @@ Notes:
 - Chargement via localhost validé
 - Correctifs de stabilité JS appliqués (timers, comparaisons, robustesse)
 - Redimensionnement à la demande disponible
+
+## TODO
+- Ajouter plus tard un panneau de programme pedagogique type DIGI-TRAN relie au plateau, avec execution visible instruction par instruction. Objectif: montrer le lien entre commande, etat logique et effet mecanique de facon plus claire qu'un compilateur purement abstrait.
