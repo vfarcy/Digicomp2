@@ -1,5 +1,9 @@
 var SHOW_DEBUG_INFO = true;
-var USE_AUDIO_EFFECTS = false;
+var USE_AUDIO_EFFECTS = true;
+var lastCollisionSoundTime = 0;
+var COLLISION_SOUND_COOLDOWN_MS = 60;
+var MIN_COLLISION_SOUND_SPEED = 80;
+var collisionSound = null;
 var holeCollisionGroup;
 var returnHoleCollisionGroup;
 var ballCollisionGroup;
@@ -130,6 +134,7 @@ function create() {
 	});
 
 	setupPhysicsEnvironment();
+	setupAudioEffects();
 	setupCollisionGroups();
 	var platforms = [[179, 49, 330, 2, 9], [261, 104, 198, 2, -4], [275, 707, 42, 2, 13], [330, 739, 35, 2, 6], [270, 739, 100, 2, -6], [368, 746, 76, 2, 92], [195, 768, 50, 2, 90], [228, 767, 45 , 2, 90], [342, 763, 30, 2, 90], [392, 748, 109, 2, 90], [352, 703, 30, 2, 20], [203, 814, 377, 2, -5], [12, 805, 38, 2, 90], [59, 541, 284, 2, 90], [95, 726, 200, 2, 8], [156, 660, 90, 2, 90], [216, 500, 129, 2, 90], [358, 457, 300, 2, 90], [222, 668, 80, 2, 50], [128, 315, 67, 2, 14], [139, 263, 43, 2, 14], [107, 370, 109, 2, 8], [112, 219, 75, 2, 81.5], [196, 199, 60, 2, 80], [92, 273, 80, 2, 90], [149, 139, 50, 2, 9], [129, 139, 25, 2, -6], [122, 179, 35, 2, 6], [178, 165, 25, 2, 4], [195, 246, 85, 2, 4], [195, 302, 85, 2, 4], [195, 358, 85, 2, 4], [195, 415, 85, 2, 4], [242, 639, 110, 2, 5], [329, 50, 75, 2, 11], [0, 830, 830, 2, 0], [0, 0, 830, 2, 0], [0, 0, 1650, 2, 90], [410, 0, 1650, 2, 90], [158, 165, 10, 2, -4], [165, 246, 25, 2, -4], [87, 125, 20, 2, 60], [68, 280, 50, 2, 68], [58, 330, 30, 2, 45], [73, 220, 10, 2, -30], [18, 209, 30, 2, 30], [18, 259, 30, 2, 30], [18, 319, 30, 2, 30], [18, 379, 30, 2, 30], [18, 429, 30, 2, 30], [18, 489, 30, 2, 30], [18, 539, 30, 2, 30], [18, 599, 30, 2, 30], [18, 649, 30, 2, 30], [48, 410, 30, 2, -30], [48, 460, 30, 2, -30], [48, 510, 30, 2, -30], [48, 570, 30, 2, -30], [48, 620, 30, 2, -30], [48, 670, 30, 2, -30], [18, 700, 30, 2, 66], [350, 260, 40, 2, -40], [340, 340, 25, 2, -30], [340, 394, 25, 2, -30], [340, 448, 30, 2, -30], [340, 504, 30, 2, -30], [340, 558, 30, 2, -30], [340, 612, 30, 2, -30], [230, 470, 25, 2, 30], [230, 522, 25, 2, 30], [230, 572, 25, 2, 30], [335, 632, 30, 2, 90], [245, 147, 30, 2, -60], [275, 177, 30, 2, -60], [285, 227, 70, 2, -75], [285, 282, 30, 2, 5], [285, 339, 30, 2, 5], [280, 394, 30, 2, 5], [285, 449, 30, 2, 5], [285, 507, 30, 2, 5], [285, 561, 30, 2, 5], [285, 615, 30, 2, 5], [295, 312, 40, 2, -5], [295, 367, 35, 2, -5], [295, 424, 35, 2, -5], [295, 480, 35, 2, -5], [295, 534, 35, 2, -5], [295, 588, 35, 2, -5], [230, 615, 35, 2, -5], [190, 675, 30, 2, -30], [168, 652, 30, 2, 30], [168, 702, 30, 2, 30], [185, 260, 20, 2, 90], [185, 310, 20, 2, 90], [190, 365, 20, 2, 90]];
 	var i = 0;
@@ -181,6 +186,17 @@ function create() {
     button = game.add.button(game.world.centerX - 75.5, 473, 'key1', speedM, this, 2, 1, 0);
 	var label = game.add.text(Math.floor(button.x + button.width / 2), Math.floor(button.y + button.height / 2), "SPEED-", style);
     label.anchor.set(0.5);
+}
+
+function setupAudioEffects() {
+	collisionSound = game.add.audio('colission', 0.25, false);
+
+	// Some browsers keep WebAudio locked until a user gesture.
+	game.input.onDown.addOnce(function () {
+		if (game.sound && game.sound.context && typeof game.sound.context.resume === 'function') {
+			game.sound.context.resume();
+		}
+	});
 }
 
 function initFunc() {
@@ -241,6 +257,44 @@ function setupPhysicsEnvironment() {
 
 	game.physics.p2.world.defaultContactMaterial.relaxation = 10000;
 
+}
+
+function getBodySpeed(body) {
+	if (!body || !body.velocity) {
+		return 0;
+	}
+	var vx = Number(body.velocity.x) || 0;
+	var vy = Number(body.velocity.y) || 0;
+	return Math.sqrt(vx * vx + vy * vy);
+}
+
+function handleBallContact(ballBody, otherBody) {
+	if (!USE_AUDIO_EFFECTS || !ballBody || !otherBody) {
+		return;
+	}
+
+	var vax = Number(ballBody.velocity && ballBody.velocity.x) || 0;
+	var vay = Number(ballBody.velocity && ballBody.velocity.y) || 0;
+	var vbx = Number(otherBody.velocity && otherBody.velocity.x) || 0;
+	var vby = Number(otherBody.velocity && otherBody.velocity.y) || 0;
+	var dvx = vax - vbx;
+	var dvy = vay - vby;
+	var relativeSpeed = Math.sqrt(dvx * dvx + dvy * dvy);
+	if (relativeSpeed < MIN_COLLISION_SOUND_SPEED) {
+		return;
+	}
+
+	var now = game.time.now;
+	if (now - lastCollisionSoundTime < COLLISION_SOUND_COOLDOWN_MS) {
+		return;
+	}
+	lastCollisionSoundTime = now;
+
+	if (collisionSound) {
+		collisionSound.play();
+		return;
+	}
+	game.sound.play('colission', 0.25, false);
 }
 
 function setupCollisionGroups() {
@@ -356,6 +410,9 @@ function setupBall(x, y, num, radius) {
 
 	balls[num].body.setCollisionGroup(ballCollisionGroup);
 	balls[num].body.collides([ballCollisionGroup, terrainCollisionGroup]);
+	balls[num].body.onBeginContact.add(function (otherBody) {
+		handleBallContact(this, otherBody);
+	}, balls[num].body);
 
 	balls[num].body.collides(holeCollisionGroup, fallInHole, balls[num]);
 	balls[num].body.collides(returnHoleCollisionGroup, returnHole, balls[num]);
